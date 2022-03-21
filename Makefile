@@ -14,7 +14,7 @@ PKG_LICENSE:=GPLv3
 
 include $(INCLUDE_DIR)/package.mk
 
-define Package/l7stats
+define Package/watchwifi
   SECTION:=net
   CATEGORY:=Network
   DEPENDS:=+jq
@@ -47,4 +47,4 @@ define Package/watchwifi/postinst
 exit 0
 endef
 
-$(eval $(call BuildPackage,l7stats))
+$(eval $(call BuildPackage,watchwifi))
