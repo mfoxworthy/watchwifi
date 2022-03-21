@@ -1,0 +1,79 @@
+#!/bin/sh
+#
+# checks a WiFi interface and restarts WiFi if the interface is down
+#
+#
+. /lib/functions.sh
+
+config_load watchwifi
+if [ $? -ne 0 ]; then
+	logger -t "watchwifi" "error: configuration file not found"
+	exit 1
+fi
+
+# load configuration for each interface
+load_conf() {
+	local instance=$1
+	if [ -z $instance ]; then return 1; fi
+
+	local enabled
+	config_get_bool enabled ${instance} enabled "false"
+	if [ "$enabled" -eq "1" ]; then
+		local iface
+
+		config_get iface ${instance} iface
+    if [ -z $iface ]; then return 1; fi
+
+		eval "${instance}_iface"=\$iface
+
+		instancelist="${instancelist} ${instance}"
+		logger -t "watchwifi" "instance '${instance}' init: watching interface '${iface}'"
+	fi
+}
+
+# check function
+get_status() {
+	local instance=$1
+	local iface
+	local status
+
+	eval iface=\$"${instance}_iface"
+
+	# perform  wifi status check
+	ubus -v call iwinfo devices | jq '.devices | index( "$iface" )' &> /dev/null
+	if [ -z $? ]; then
+		status=1
+	else
+		status=0
+	fi
+
+	if [ $status = 1 ]; then
+		logger -t "watchwifi" "instance '${instance}' error: interface (${iface}) is down for $status checks, bumping driver!"
+		# restart service
+		eval "/sbin/wifi up $iface"
+	fi
+
+	return $status
+}
+
+
+# load configuration
+instancelist=""
+config_foreach load_conf watchwifi
+
+# status loop
+firstrun=true
+while sleep 60; do
+	for instance in $instancelist; do
+		get_status ${instance}
+
+		if [ $? -eq 0 ] && [ "$firstrun" = true ]; then
+			logger -t "watchwifi" "instance '${instance}' initialization successful, wifi up"
+		elif [ "$firstrun" = true ]; then
+			logger -t "watchwifi" "instance '${instance}' initialization failed, wifi down"
+		fi
+	done
+	if [ "$firstrun" = true ]; then firstrun=false; fi
+done
+
+exit 0
